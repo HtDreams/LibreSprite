@@ -304,6 +304,11 @@ if(MORPHOS)
   # para el conflicto de isnan entre libm.a y libnix/libc.a.
   # No hay X11 ni integración de escritorio: el backend es SDL2 (sdl2.library).
   list(APPEND PLATFORM_LIBS m pthread)
+
+  # setlocale() de libnix no acepta la cadena compuesta que él mismo devuelve para
+  # LC_ALL, y la libstdc++ la usa para guardar/restaurar el locale en cada stream:
+  # el separador decimal acaba siendo el de MorphOS. Ver src/base/morphos_setlocale.cpp
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,--wrap=setlocale")
 endif()
 
 # -- Windows --

@@ -72,7 +72,8 @@ endif()
 if(MORPHOS)
   # Funciones de sistema con dos.library/workbench.library/openurl.library
   set(BASE_SOURCES ${BASE_SOURCES}
-    morphos_sys.cpp)
+    morphos_sys.cpp
+    morphos_setlocale.cpp)
 endif()
 
 # TODO remove dependency with observable library

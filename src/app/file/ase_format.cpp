@@ -458,6 +458,20 @@ bool AseFormat::onSave(FileOp* fop)
   }
 }
 
+// Moves the write position forward to `target`, reserving space that is
+// filled in later (headers, chunk sizes). fseek() past the end of a file
+// extends it with zeros on POSIX/Windows, but AmigaDOS Seek() (MorphOS) can't
+// go beyond EOF and the following data ends up in the wrong place. Writing the
+// zeros explicitly gives the same bytes on every platform.
+static void ase_file_seek_forward(FILE* f, long target)
+{
+  fseek(f, 0, SEEK_END);
+  long end = ftell(f);
+  for (; end < target; ++end)
+    fputc(0, f);
+  fseek(f, target, SEEK_SET);
+}
+
 static bool ase_file_read_header(FILE* f, ASE_Header* header)
 {
   header->pos = ftell(f);
@@ -530,7 +544,7 @@ static void ase_file_write_header(FILE* f, ASE_Header* header)
   fputc(header->ignore[2], f);
   fputw(header->ncolors, f);
 
-  fseek(f, header->pos+128, SEEK_SET);
+  ase_file_seek_forward(f, header->pos+128);
 }
 
 static void ase_file_write_header_filesize(FILE* f, ASE_Header* header)
@@ -561,7 +575,7 @@ static void ase_file_prepare_frame_header(FILE* f, ASE_FrameHeader* frame_header
   frame_header->chunks = 0;
   frame_header->duration = 0;
 
-  fseek(f, pos+16, SEEK_SET);
+  ase_file_seek_forward(f, pos+16);
 }
 
 static void ase_file_write_frame_header(FILE* f, ASE_FrameHeader* frame_header)
@@ -665,7 +679,7 @@ static void ase_file_write_start_chunk(FILE* f, ASE_FrameHeader* frame_header, i
   chunk->type = type;
   chunk->start = ftell(f);
 
-  fseek(f, chunk->start+6, SEEK_SET);
+  ase_file_seek_forward(f, chunk->start+6);
 }
 
 static void ase_file_write_close_chunk(FILE* f, ASE_Chunk* chunk)
