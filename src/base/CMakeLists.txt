@@ -69,6 +69,12 @@ if(WIN32)
     win32_exception.cpp)
 endif()
 
+if(MORPHOS)
+  # Funciones de sistema con dos.library/workbench.library/openurl.library
+  set(BASE_SOURCES ${BASE_SOURCES}
+    morphos_sys.cpp)
+endif()
+
 # TODO remove dependency with observable library
 add_library(base-lib ${BASE_SOURCES})
 target_link_libraries(base-lib obs modp_b64)

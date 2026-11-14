@@ -30,6 +30,14 @@
 #ifdef _WIN32
 #include <windows.h>
 #endif
+
+#ifdef __MORPHOS__
+// Pila del proceso: equivale a "Stack 4000000" en el Shell. El arranque de libnix
+// reserva una pila nueva si la del Shell/Workbench es menor (por defecto suele ser
+// de unos pocos KB). LibreSprite anida mucho en la interfaz y QuickJS usa hasta 1 MB.
+extern "C" { unsigned long __stack = 4 * 1024 * 1024; }
+#endif
+
 #ifdef EMSCRIPTEN
 #define LIFETIME static
 #else

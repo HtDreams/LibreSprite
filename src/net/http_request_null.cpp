@@ -13,7 +13,7 @@
 #include "base/debug.h"
 #include "net/http_response.h"
 
-#if !__has_include(<curl/curl.h>)
+#if !__has_include(<curl/curl.h>) || defined(LIBRESPRITE_NO_CURL)
 
 namespace net {
 class HttpRequestImpl {};

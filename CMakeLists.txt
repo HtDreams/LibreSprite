@@ -198,6 +198,13 @@ endif()
 # pixman
 find_library(PIXMAN_LIBRARY NAMES pixman pixman-1)
 find_path(PIXMAN_INCLUDE_DIR NAMES pixman.h PATH_SUFFIXES pixman-1)
+if(MORPHOS)
+  # MorphOS: pixman es la librería compartida pixman.library del SDK. No hay .a
+  # (se llama vía proto/pixman.h) y la cabecera está en os-include, fuera de las
+  # rutas de búsqueda de la toolchain.
+  set(PIXMAN_INCLUDE_DIR "${MORPHOS_GG}/os-include/pixman-1")
+  set(PIXMAN_LIBRARY "")
+endif()
 include_directories(${PIXMAN_INCLUDE_DIR})
 
 # freetype
@@ -211,8 +218,12 @@ find_package(JPEG REQUIRED)
 include_directories(${JPEG_INCLUDE_DIRS})
 
 
-find_package(CURL REQUIRED)
-include_directories(${CURL_INCLUDE_DIRS})
+# MorphOS: sin CURL. Solo lo usa HTTP::fetch de la API de scripts; net-lib usa
+# http_request_null.cpp (ver src/net/CMakeLists.txt).
+if(NOT MORPHOS)
+  find_package(CURL REQUIRED)
+  include_directories(${CURL_INCLUDE_DIRS})
+endif()
 endif()
 # simpleini
 include_directories(${SIMPLEINI_DIR})
@@ -283,6 +294,16 @@ if(UNIX AND NOT APPLE AND NOT BEOS AND NOT GEN_ONLY)
     include_directories(${GTKMM_INCLUDE_DIRS})
     link_directories(${GTKMM_LIBRARY_DIRS})
   endif()
+endif()
+
+# -- MorphOS --
+
+if(MORPHOS)
+  # libnix: libm (funciones C99 como roundf/sinf; libc.a de libnix no las trae)
+  # y pthreads (libarchive y QuickJS usan pthread_*). Ver base/morphos_sys.cpp
+  # para el conflicto de isnan entre libm.a y libnix/libc.a.
+  # No hay X11 ni integración de escritorio: el backend es SDL2 (sdl2.library).
+  list(APPEND PLATFORM_LIBS m pthread)
 endif()
 
 # -- Windows --

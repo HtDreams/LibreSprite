@@ -4,6 +4,9 @@
 // This file is released under the terms of the MIT license.
 // Read LICENSE.txt for more information.
 
+#ifdef __MORPHOS__
+#include "base/morphos_sys.h"
+#endif
 #include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -143,6 +146,9 @@ std::string get_app_path()
       path.resize(size);
 #elif defined(ANDROID)
   return _AndroidDataDir + "/";
+#elif defined(__MORPHOS__)
+  // MorphOS: no hay /proc. Ruta del ejecutable desde PROGDIR: (dos.library)
+  return base::morphos::get_app_path();
 #else  /* linux */
   readlink("/proc/self/exe", &path[0], path.size());
 #endif
@@ -155,8 +161,11 @@ std::string get_temp_path()
   char* tmpdir = getenv("TMPDIR");
   if (tmpdir)
     return tmpdir;
-  else
-    return "/tmp";
+#ifdef __MORPHOS__
+  return "T:";      // directorio temporal estándar de AmigaDOS
+#else
+  return "/tmp";
+#endif
 }
 
 std::string get_user_docs_folder()
@@ -174,6 +183,10 @@ std::string get_user_docs_folder()
 
 std::string get_canonical_path(const std::string& path)
 {
+#ifdef __MORPHOS__
+  // libnix no implementa realpath(): Lock() + NameFromLock()
+  return base::morphos::get_canonical_path(path);
+#endif
   char buffer[PATH_MAX];
   if (realpath(path.c_str(), buffer) == NULL) {
     return path;
@@ -208,11 +221,28 @@ std::vector<std::string> get_font_paths()
     };
 }
 
+#elif defined(__MORPHOS__)
+
+std::vector<std::string> get_font_paths()
+{
+    // MorphOS: fuentes del sistema en FONTS: (TrueType/OpenType en subcajones).
+    // Las rutas que no existan se ignoran al recorrerlas.
+    return {
+        "FONTS:",
+        "FONTS:_ttf",
+        "FONTS:_TrueType",
+        "FONTS:_OpenType"
+    };
+}
+
 #elif !__APPLE__
 
 std::vector<std::string> get_font_paths()
 {
-    std::string home = getenv("HOME");
+    // getenv() devuelve NULL si HOME no existe: construir std::string con NULL
+    // lanza "basic_string: construction from null is not valid".
+    const char* homeEnv = getenv("HOME");
+    std::string home = homeEnv ? homeEnv : "";
     if (home.empty())
         home = "~";
     return {

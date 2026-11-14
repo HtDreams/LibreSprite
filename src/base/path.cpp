@@ -46,6 +46,17 @@ std::string get_file_path(const std::string& filename)
     std::copy(filename.begin(), std::string::const_iterator(rit.base()),
               std::back_inserter(res));
   }
+#ifdef __MORPHOS__
+  else {
+    // AmigaDOS: "Volumen:fichero" no lleva '/'. La ruta es "Volumen:"
+    // (con los dos puntos, que forman parte del nombre del volumen).
+    // "Volumen:" es una raíz: su padre es la raíz del árbol (""), como "/" en
+    // Unix. Si no, FileSystemModule entraría en recursión infinita buscando padres.
+    std::string::size_type colon = filename.rfind(':');
+    if (colon != std::string::npos && colon + 1 < filename.size())
+      res = filename.substr(0, colon + 1);
+  }
+#endif
 
   return res;
 }
@@ -58,6 +69,16 @@ std::string get_file_name(const std::string& filename)
   for (rit=filename.rbegin(); rit!=filename.rend(); ++rit)
     if (is_path_separator(*rit))
       break;
+
+#ifdef __MORPHOS__
+  // AmigaDOS: en "Volumen:fichero" el nombre empieza tras los dos puntos.
+  // Para la raíz de un volumen ("Work:") el nombre es el propio volumen.
+  if (rit == filename.rend()) {
+    std::string::size_type colon = filename.rfind(':');
+    if (colon != std::string::npos && colon + 1 < filename.size())
+      return filename.substr(colon + 1);
+  }
+#endif
 
   std::copy(std::string::const_iterator(rit.base()), filename.end(),
             std::back_inserter(result));
@@ -138,7 +159,12 @@ std::string join_path(const std::string& path, const std::string& file)
   std::string result(path);
 
   // Add a separator at the end if it is necessay
-  if (!result.empty() && !is_path_separator(*(result.end()-1)))
+  if (!result.empty() && !is_path_separator(*(result.end()-1))
+#ifdef __MORPHOS__
+      // AmigaDOS: tras "Volumen:" no va '/' ("Work:/x" significaría otra cosa)
+      && *(result.end()-1) != ':'
+#endif
+      )
     result.push_back(path_separator);
 
   // Add the file

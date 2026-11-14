@@ -25,7 +25,7 @@ endif(MSVC)
 # Directories where .h files can be found
 include_directories(. .. ../third_party ../third_party/observable)
 
-if((UNIX AND NOT APPLE) OR (WIN32 AND NOT MSVC))
+if((UNIX AND NOT APPLE) OR (WIN32 AND NOT MSVC) OR MORPHOS)
   set(KEEP_INJECTIONS_BEGIN "-Wl,--whole-archive")
   set(KEEP_INJECTIONS_END "-Wl,--no-whole-archive")
 endif()
@@ -73,7 +73,11 @@ add_subdirectory(base)
 # Directory where base/config.h file is located
 include_directories(${BASE_INCLUDE_DIR})
 
-add_subdirectory(gen)
+# En compilación cruzada "gen" debe ejecutarse en el anfitrión: se puede pasar uno
+# ya compilado con -DGEN_EXECUTABLE=/ruta/gen y entonces no se compila aquí.
+if(NOT GEN_EXECUTABLE)
+  add_subdirectory(gen)
+endif()
 add_subdirectory(app)
 if (NOT GEN_ONLY)
 add_subdirectory(cfg)

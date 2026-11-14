@@ -21,7 +21,11 @@
 #include <emscripten/emscripten.h>
 #endif
 
-#if !defined(_WIN32) && !defined(__EMSCRIPTEN__) && !defined(ANDROID)
+#ifdef __MORPHOS__
+#include "base/morphos_sys.h"
+#endif
+
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__) && !defined(ANDROID) && !defined(__MORPHOS__)
 #include <spawn.h>
 #include <sys/wait.h>
 
@@ -135,6 +139,16 @@ bool open_file(const std::string& file)
 
   // No-op
 
+#elif defined(__MORPHOS__)
+
+  // URL -> navegador (openurl.library); fichero -> su herramienta por defecto,
+  // como un doble clic en Ambient (no hay posix_spawn en libnix)
+  auto protocol = base::string_to_lower(base::split(file, ':')[0]);
+  if (protocol == "https" || protocol == "http" || protocol == "mailto")
+    ret = base::morphos::open_url(file) ? 0 : -1;
+  else
+    ret = base::morphos::open_workbench_object(file) ? 0 : -1;
+
 #else
 
   ret = spawn_and_wait({"xdg-open", file});
@@ -175,6 +189,13 @@ bool open_folder(const std::string& _file)
 #elif ANDROID
 
   // No-op
+
+#elif defined(__MORPHOS__)
+
+  // Abre la carpeta como ventana de Ambient
+  if (!base::is_directory(file))
+    file = base::get_file_path(file);
+  return base::morphos::open_workbench_object(file);
 
 #else
 

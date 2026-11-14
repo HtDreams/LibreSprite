@@ -52,7 +52,13 @@ pid get_current_process_id()
 
 bool is_process_running(pid pid)
 {
+#ifdef __MORPHOS__
+  // libnix no tiene kill(). Solo se reconoce el proceso actual: las sesiones
+  // de otras ejecuciones se consideran terminadas (recuperación de datos).
+  return pid == get_current_process_id();
+#else
   return (kill(pid, 0) == 0);
+#endif
 }
 
 #endif

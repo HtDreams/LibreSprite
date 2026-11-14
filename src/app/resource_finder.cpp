@@ -106,6 +106,12 @@ void ResourceFinder::includeDataDir(const char* filename)
   snprintf(buf, sizeof(buf), "../share/libresprite/data/%s", filename);
   includeBinDir(buf);
   
+#elif defined(__MORPHOS__)
+
+  // MorphOS: instalación "portable" en un cajón. Datos en PROGDIR:data/
+  snprintf(buf, sizeof(buf), "data/%s", filename);
+  includeBinDir(buf);  // $BINDIR/data/filename
+
 #else
 
 
@@ -182,6 +188,12 @@ void ResourceFinder::includeUserDir(const char* filename)
       base::join_path(base::get_lib_app_support_path(), PACKAGE),
       filename).c_str());
 
+#elif defined(__MORPHOS__)
+
+  // MorphOS: configuración junto al programa, en PROGDIR:prefs/ (no hay $HOME
+  // ni ~/.config). getFirstOrCreateDefault() crea el cajón si no existe.
+  includeBinDir((std::string("prefs/") + filename).c_str());
+
 #else
 
   char buf[4096];
@@ -249,6 +261,13 @@ std::string ResourceFinder::getFirstOrCreateDefault()
     if (!base::is_directory(dir))
       base::make_all_directories(dir);
   }
+
+  // Callers ask for a directory with includeUserDir("dir/.") (sessions,
+  // scripts, palettes). Return "dir" instead of "dir/.": the "." entry only
+  // means "this directory" on Unix/Windows; on AmigaDOS (MorphOS) "dir/./x"
+  // refers to a sub-directory literally called ".". Same result elsewhere.
+  if (base::get_file_name(fn) == ".")
+    fn = base::get_file_path(fn);
 
   return fn;
 }
