@@ -98,6 +98,10 @@ extern "C" {
 #define alloca _alloca
 #define ssize_t ptrdiff_t
 #endif
+#if defined(__MORPHOS__) && !defined(alloca)
+/* MorphOS (libnix): ninguna cabecera de libnix declara alloca(); se usa el builtin de GCC */
+#define alloca __builtin_alloca
+#endif
 #if defined(__APPLE__)
 #include <malloc/malloc.h>
 #elif defined(__linux__) || defined(__ANDROID__) || defined(__CYGWIN__) || defined(__GLIBC__)
@@ -107,7 +111,7 @@ extern "C" {
 #elif defined(_WIN32)
 #include <windows.h>
 #endif
-#if !defined(_WIN32) && !defined(EMSCRIPTEN) && !defined(__wasi__) && !defined(__3DS__)
+#if !defined(_WIN32) && !defined(EMSCRIPTEN) && !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
 #include <errno.h>
 #include <pthread.h>
 #endif
@@ -644,7 +648,7 @@ int js_exepath(char* buffer, size_t* size);
 
 /* Cross-platform threading APIs. */
 
-#if defined(EMSCRIPTEN) || defined(__wasi__) || defined(__3DS__)
+#if defined(EMSCRIPTEN) || defined(__wasi__) || (defined(__3DS__) || defined(__MORPHOS__))
 
 #define JS_HAVE_THREADS 0
 
@@ -7124,7 +7128,7 @@ JS_EXTERN uintptr_t js_std_cmd(int cmd, ...);
 // atomic_store etc. are completely busted in recent versions of tcc;
 // somehow the compiler forgets to load |ptr| into %rdi when calling
 // the __atomic_*() helpers in its lib/stdatomic.c and lib/atomic.S
-#if !defined(__TINYC__) && !defined(EMSCRIPTEN) && !defined(__wasi__) && !__STDC_NO_ATOMICS__ && !defined(__3DS__)
+#if !defined(__TINYC__) && !defined(EMSCRIPTEN) && !defined(__wasi__) && !__STDC_NO_ATOMICS__ && !(defined(__3DS__) || defined(__MORPHOS__))
 
 #define CONFIG_ATOMICS
 #endif
@@ -75455,7 +75459,7 @@ JS_EXTERN void js_std_set_worker_new_context_func(JSContext *(*func)(JSRuntime *
 #else
 #include <sys/ioctl.h>
 #include <poll.h>
-#if !defined(__wasi__) && !defined(__3DS__)
+#if !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
 #include <dlfcn.h>
 #include <termios.h>
 #include <sys/resource.h>
@@ -76068,7 +76072,7 @@ static JSModuleDef *js_module_loader_so(JSContext *ctx,
     }
     return m;
 }
-#elif defined(__wasi__) || defined(__3DS__)
+#elif defined(__wasi__) || (defined(__3DS__) || defined(__MORPHOS__))
 static JSModuleDef *js_module_loader_so(JSContext *ctx,
                                         const char *module_name)
 {
@@ -76145,7 +76149,7 @@ int js_module_set_import_meta(JSContext *ctx, JSValueConst func_val,
         return -1;
     if (!strchr(module_name, ':')) {
         strcpy(buf, "file://");
-#if !defined(_WIN32) && !defined(__wasi__) && !defined(__3DS__)
+#if !defined(_WIN32) && !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
         /* realpath() cannot be used with modules compiled with qjsc
            because the corresponding module source code is not
            necessarily present */
@@ -76260,6 +76264,21 @@ static void unsetenv(const char *name)
 {
     setenv(name, "", true);
 }
+#elif defined(__MORPHOS__)
+/* libnix declara setenv()/unsetenv() pero no las implementa. En MorphOS
+   std.setenv()/std.unsetenv() no tienen efecto (LibreSprite no carga el módulo std).
+   Se renombran para no chocar con la declaración de libnix. */
+#define setenv qjs_morphos_setenv
+#define unsetenv qjs_morphos_unsetenv
+static void setenv(const char *name, const char *value, int overwrite)
+{
+    (void)name; (void)value; (void)overwrite;
+}
+
+static void unsetenv(const char *name)
+{
+    (void)name;
+}
 #endif /* _WIN32 */
 
 static JSValue js_std_setenv(JSContext *ctx, JSValueConst this_val,
@@ -76308,7 +76327,16 @@ static JSValue js_std_getenviron(JSContext *ctx, JSValueConst this_val,
     obj = JS_NewObject(ctx);
     if (JS_IsException(obj))
         return JS_EXCEPTION;
+#if defined(__MORPHOS__)
+    {
+        /* libnix no exporta environ: std.getenviron() devuelve un objeto vacío.
+           std.getenv() sigue funcionando (lee las variables de ENV:). */
+        static char *morphos_no_environ[] = { NULL };
+        envp = morphos_no_environ;
+    }
+#else
     envp = environ;
+#endif
     for(idx = 0; envp[idx] != NULL; idx++) {
         name = envp[idx];
         p = strchr(name, '=');
@@ -76447,7 +76475,7 @@ static void js_std_file_finalizer(JSRuntime *rt, JSValueConst val)
     JSSTDFile *s = JS_GetOpaque(val, ts->std_file_class_id);
     if (s) {
         if (s->f && !is_stdio(s->f)) {
-#if !defined(__wasi__) && !defined(__3DS__)
+#if !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
             if (s->is_popen)
                 pclose(s->f);
             else
@@ -76537,7 +76565,7 @@ static JSValue js_std_open(JSContext *ctx, JSValueConst this_val,
     return JS_EXCEPTION;
 }
 
-#if !defined(__wasi__) && !defined(__3DS__)
+#if !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
 static JSValue js_std_popen(JSContext *ctx, JSValueConst this_val,
                             int argc, JSValueConst *argv)
 {
@@ -76608,7 +76636,7 @@ static JSValue js_std_fdopen(JSContext *ctx, JSValueConst this_val,
     return JS_EXCEPTION;
 }
 
-#if !defined(__wasi__) && !defined(__3DS__)
+#if !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
 static JSValue js_std_tmpfile(JSContext *ctx, JSValueConst this_val,
                               int argc, JSValueConst *argv)
 {
@@ -76687,7 +76715,7 @@ static JSValue js_std_file_close(JSContext *ctx, JSValueConst this_val,
         return JS_ThrowTypeError(ctx, "invalid file handle");
     if (is_stdio(s->f))
         return JS_ThrowTypeError(ctx, "cannot close stdio");
-#if !defined(__wasi__) && !defined(__3DS__)
+#if !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
     if (s->is_popen)
         err = js_get_errno(pclose(s->f));
     else
@@ -76925,7 +76953,7 @@ static JSValue js_std_file_putByte(JSContext *ctx, JSValueConst this_val,
 }
 
 /* urlGet */
-#if !defined(__wasi__) && !defined(__3DS__)
+#if !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
 
 #define URL_GET_PROGRAM "curl -s -i --"
 #define URL_GET_BUF_SIZE 4096
@@ -77152,7 +77180,7 @@ static const JSCFunctionListEntry js_std_funcs[] = {
     JS_CFUNC_DEF("setenv", 1, js_std_setenv ),
     JS_CFUNC_DEF("unsetenv", 1, js_std_unsetenv ),
     JS_CFUNC_DEF("getenviron", 1, js_std_getenviron ),
-#if !defined(__wasi__) && !defined(__3DS__)
+#if !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
     JS_CFUNC_DEF("urlGet", 1, js_std_urlGet ),
 #endif
     JS_CFUNC_DEF("loadFile", 1, js_std_loadFile ),
@@ -77161,7 +77189,7 @@ static const JSCFunctionListEntry js_std_funcs[] = {
 
     /* FILE I/O */
     JS_CFUNC_DEF("open", 2, js_std_open ),
-#if !defined(__wasi__) && !defined(__3DS__)
+#if !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
     JS_CFUNC_DEF("popen", 2, js_std_popen ),
     JS_CFUNC_DEF("tmpfile", 0, js_std_tmpfile ),
 #endif
@@ -77380,7 +77408,7 @@ static JSValue js_os_ttySetRaw(JSContext *ctx, JSValueConst this_val,
     }
     return JS_UNDEFINED;
 }
-#elif !defined(__wasi__) && !defined(__3DS__)
+#elif !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
 static JSValue js_os_ttyGetWinSize(JSContext *ctx, JSValueConst this_val,
                                    int argc, JSValueConst *argv)
 {
@@ -77589,7 +77617,7 @@ typedef void (*sighandler_t)(int sig_num);
 static JSValue js_os_signal(JSContext *ctx, JSValueConst this_val,
                             int argc, JSValueConst *argv)
 {
-#if !defined(__3DS__)
+#if !(defined(__3DS__) || defined(__MORPHOS__))
     JSRuntime *rt = JS_GetRuntime(ctx);
     JSThreadState *ts = js_get_thread_state(rt);
     JSOSSignalHandler *sh;
@@ -77635,7 +77663,7 @@ static JSValue js_os_signal(JSContext *ctx, JSValueConst this_val,
     return JS_UNDEFINED;
 }
 
-#if !defined(_WIN32) && !defined(__wasi__) && !defined(__3DS__)
+#if !defined(_WIN32) && !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
 static JSValue js_os_cputime(JSContext *ctx, JSValueConst this_val,
                              int argc, JSValueConst *argv)
 {
@@ -78032,6 +78060,26 @@ static int js_os_poll(JSContext *ctx)
 done:
     return 0;
 }
+#elif defined(__MORPHOS__)
+/* MorphOS (libnix) no tiene poll(). Variante mínima: solo temporizadores
+   (os.setTimeout/setInterval). Los manejadores de lectura/escritura
+   (os.setReadHandler/setWriteHandler) no se atienden y no hay workers ni señales.
+   LibreSprite solo usa js_std_loop para promesas y temporizadores. */
+static int js_os_poll(JSContext *ctx)
+{
+    JSRuntime *rt = JS_GetRuntime(ctx);
+    JSThreadState *ts = js_get_thread_state(rt);
+    int min_delay;
+
+    if (js_os_run_timers(rt, ctx, ts, &min_delay))
+        return -1;
+    if (min_delay == 0)
+        return 0; // expired timer
+    if (min_delay < 0)
+        return -1; /* no more events */
+    usleep((useconds_t)min_delay * 1000);
+    return 0;
+}
 #else // !defined(_WIN32)
 static int js_os_poll(JSContext *ctx)
 {
@@ -78371,7 +78419,7 @@ static JSValue js_os_stat(JSContext *ctx, JSValueConst this_val,
                                   JS_NewInt64(ctx, st.st_blocks),
                                   JS_PROP_C_W_E);
 #endif
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(__MORPHOS__) /* MorphOS: struct stat sin st_atim (solo segundos) */
         JS_DefinePropertyValueStr(ctx, obj, "atime",
                                   JS_NewInt64(ctx, (int64_t)st.st_atime * 1000),
                                   JS_PROP_C_W_E);
@@ -78435,6 +78483,10 @@ static JSValue js_os_utimes(JSContext *ctx, JSValueConst this_val,
         times.modtime = mtime / 1000;
         ret = js_get_errno(_utime(path, &times));
     }
+#elif defined(__MORPHOS__)
+    /* libnix no implementa utimes(): os.utimes() devuelve -ENOSYS */
+    (void)atime; (void)mtime;
+    ret = -ENOSYS;
 #else
     {
         struct timeval times[2];
@@ -78489,7 +78541,7 @@ static char *realpath(const char *path, char *buf)
 }
 #endif
 
-#if !defined(__wasi__) && !defined(__3DS__)
+#if !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
 /* return [path, errorcode] */
 static JSValue js_os_realpath(JSContext *ctx, JSValueConst this_val,
                               int argc, JSValueConst *argv)
@@ -78513,7 +78565,7 @@ static JSValue js_os_realpath(JSContext *ctx, JSValueConst this_val,
 }
 #endif
 
-#if !defined(_WIN32) && !defined(__wasi__) && !defined(__3DS__)
+#if !defined(_WIN32) && !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
 static JSValue js_os_symlink(JSContext *ctx, JSValueConst this_val,
                               int argc, JSValueConst *argv)
 {
@@ -78675,7 +78727,7 @@ static int my_execvpe(const char *filename, char **argv, char **envp)
 
 static void (*js_os_exec_closefrom)(int);
 
-#if !defined(EMSCRIPTEN) && !defined(__wasi__) && !defined(__3DS__)
+#if !defined(EMSCRIPTEN) && !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
 
 static js_once_t js_os_exec_once = JS_ONCE_INIT;
 
@@ -78841,7 +78893,7 @@ static JSValue js_os_exec(JSContext *ctx, JSValueConst this_val,
 
     }
 
-#if !defined(EMSCRIPTEN) && !defined(__wasi__) && !defined(__3DS__)
+#if !defined(EMSCRIPTEN) && !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
     // should happen pre-fork because it calls dlsym()
     // and that's not an async-signal-safe function
     js_once(&js_os_exec_once, js_os_exec_once_init);
@@ -79487,6 +79539,8 @@ void js_std_set_worker_new_context_func(JSContext *(*func)(JSRuntime *rt))
 #define OS_PLATFORM "wasi"
 #elif defined(__GNU__)
 #define OS_PLATFORM "hurd"
+#elif defined(__MORPHOS__)
+#define OS_PLATFORM "morphos"
 #elif defined(__3DS__)
 #define OS_PLATFORM "3ds"
 #else
@@ -79513,7 +79567,7 @@ static const JSCFunctionListEntry js_os_funcs[] = {
     JS_CFUNC_MAGIC_DEF("read", 4, js_os_read_write, 0 ),
     JS_CFUNC_MAGIC_DEF("write", 4, js_os_read_write, 1 ),
     JS_CFUNC_DEF("isatty", 1, js_os_isatty ),
-#if !defined(__wasi__) && !defined(__3DS__)
+#if !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
     JS_CFUNC_DEF("ttyGetWinSize", 1, js_os_ttyGetWinSize ),
     JS_CFUNC_DEF("ttySetRaw", 1, js_os_ttySetRaw ),
 #endif
@@ -79528,7 +79582,7 @@ static const JSCFunctionListEntry js_os_funcs[] = {
     OS_FLAG(SIGILL),
     OS_FLAG(SIGSEGV),
     OS_FLAG(SIGTERM),
-#if !defined(_WIN32) && !defined(__wasi__) && !defined(__3DS__)
+#if !defined(_WIN32) && !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
     OS_FLAG(SIGQUIT),
     OS_FLAG(SIGPIPE),
     OS_FLAG(SIGALRM),
@@ -79571,10 +79625,10 @@ static const JSCFunctionListEntry js_os_funcs[] = {
     JS_CFUNC_MAGIC_DEF("stat", 1, js_os_stat, 0 ),
     JS_CFUNC_DEF("utimes", 3, js_os_utimes ),
     JS_CFUNC_DEF("sleep", 1, js_os_sleep ),
-#if !defined(__wasi__) && !defined(__3DS__)
+#if !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
     JS_CFUNC_DEF("realpath", 1, js_os_realpath ),
 #endif
-#if !defined(_WIN32) && !defined(__wasi__) && !defined(__3DS__)
+#if !defined(_WIN32) && !defined(__wasi__) && !(defined(__3DS__) || defined(__MORPHOS__))
     JS_CFUNC_MAGIC_DEF("lstat", 1, js_os_stat, 1 ),
     JS_CFUNC_DEF("symlink", 2, js_os_symlink ),
     JS_CFUNC_DEF("readlink", 1, js_os_readlink ),
