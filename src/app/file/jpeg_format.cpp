@@ -38,7 +38,9 @@ class JpegFormat : public FileFormat {
   // Data for JPEG files
   class JpegOptions : public FormatOptions {
   public:
-    float quality;              // 1.0 maximum quality.
+    // 1.0 maximum quality. Initialized: in batch mode (--batch, no UI) the
+    // options are used as constructed and the value was indeterminate.
+    float quality = 1.0f;
   };
 
   const char* onGetName() const override { return "jpeg"; }

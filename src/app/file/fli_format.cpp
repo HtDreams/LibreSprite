@@ -187,6 +187,30 @@ static int get_time_precision(const Sprite *sprite)
   return precision;
 }
 
+// Equivale al flic::StdioFileInterface original, pero rellena con ceros al hacer seek()
+// más allá del final. El encoder reserva cabeceras así (seek(128) tras escribir los 20
+// primeros bytes de la cabecera FLC). POSIX fseek() amplía el fichero con ceros, pero
+// AmigaDOS Seek() (MorphOS) no puede pasar del final: los datos quedaban 108 bytes antes
+// y el seek(80) posterior pisaba el primer fotograma. Se hace aquí y no en src/flic
+// porque ese directorio es un submódulo de aseprite/flic.
+class PaddingStdioFileInterface : public flic::StdioFileInterface {
+public:
+  PaddingStdioFileInterface(FILE* file)
+    : flic::StdioFileInterface(file), m_f(file) { }
+
+  void seek(size_t absPos) override {
+    if (fseek(m_f, 0, SEEK_END) == 0) {
+      long end = ftell(m_f);
+      for (long pos = end; pos >= 0 && (size_t)pos < absPos; ++pos)
+        fputc(0, m_f);
+    }
+    flic::StdioFileInterface::seek(absPos);
+  }
+
+private:
+  FILE* m_f;
+};
+
 bool FliFormat::onSave(FileOp* fop)
 {
   const Sprite* sprite = fop->document()->sprite();
@@ -194,7 +218,7 @@ bool FliFormat::onSave(FileOp* fop)
   // Open the file to write in binary mode
   FileHandle handle(open_file_with_exception(fop->filename(), "wb"));
   FILE* f = handle.get();
-  flic::StdioFileInterface finterface(f);
+  PaddingStdioFileInterface finterface(f);
   flic::Encoder encoder(&finterface);
 
   flic::Header header;
