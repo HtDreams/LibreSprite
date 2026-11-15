@@ -538,6 +538,16 @@ namespace she {
         case SDL_KEYUP: {
           Event event;
           bool isPressed = sdlEvent.type == SDL_KEYDOWN;
+#ifdef __MORPHOS__
+          // MorphOS: the Amiga keys (Cmd on Apple keyboards) are the usual shortcut
+          // modifier, but LibreSprite only uses Cmd+... on macOS. Treat them as Ctrl so
+          // both Ctrl+S and Amiga+S work. Both map to the right Ctrl: Apple keyboards
+          // have no right Ctrl, so this does not clash with the physical left Ctrl.
+          if (sdlEvent.key.keysym.sym == SDLK_LGUI || sdlEvent.key.keysym.sym == SDLK_RGUI) {
+            sdlEvent.key.keysym.sym = SDLK_RCTRL;
+            sdlEvent.key.keysym.scancode = SDL_SCANCODE_RCTRL;
+          }
+#endif
           auto modifierIt = modifiers.find((SDL_Keycode) sdlEvent.key.keysym.sym);
           if (modifierIt != modifiers.end()) {
             modifierIt->second.isPressed = sdlEvent.type == SDL_KEYDOWN;
