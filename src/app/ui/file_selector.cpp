@@ -657,6 +657,12 @@ again:
           buf = fn;
 #endif
         }
+#ifdef __MORPHOS__
+        // AmigaDOS: "Volumen:ruta" es una ruta absoluta
+        else if (fn.find(':') != std::string::npos) {
+          buf = fn;
+        }
+#endif
 #ifdef _WIN32
         // does the file-name entry have colon?
         else if (fn.find(':') != std::string::npos) { // absolute path on Windows
@@ -973,12 +979,21 @@ bool FileSelector::onLocationEntryEnter()
   if (typedPath.empty() || typedPath == currentFolder->displayName())
     return true;
 
+#ifdef __MORPHOS__
+  // AmigaDOS: "Volumen:..." es absoluta; lo demás, relativo a la carpeta actual.
+  // Sin lexically_normal(): en AmigaDOS "/" al principio o "//" significan "subir
+  // un nivel" y ".." es un nombre normal. Lo resuelve dos.library al abrir la ruta.
+  std::string buf = (typedPath.find(':') != std::string::npos)
+    ? typedPath
+    : base::join_path(currentFolder->fileName(), typedPath);
+#else
   namespace fs = std::filesystem;
   fs::path current(currentFolder->fileName());
   fs::path input(typedPath);
   fs::path resolved = (input.is_absolute() ? input : (current / input)).lexically_normal();
 
   std::string buf = base::fix_path_separators(resolved.string());
+#endif
 
   IFileItem* item = FileSystemModule::instance()->getFileItemFromPath(buf);
   if (item && item->isFolder() && item->isBrowsable()) {

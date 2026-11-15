@@ -23,6 +23,7 @@
 #include "she/display.h"
 #include "she/surface.h"
 #include "she/system.h"
+#include "base/exception.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -38,6 +39,10 @@
   #define MYPC_CSLID  "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}"
 #else
   #include <dirent.h>
+#endif
+
+#ifdef __MORPHOS__
+  #include "base/morphos_sys.h"
 #endif
 
 //////////////////////////////////////////////////////////////////////
@@ -240,6 +245,15 @@ IFileItem* FileSystemModule::getRootFileItem()
     shl_idesktop->GetAttributesOf(1, (LPCITEMIDLIST *)&pidl, &attrib);
 
     update_by_pidl(fileitem, attrib);
+  }
+#elif defined(__MORPHOS__)
+  {
+    // MorphOS (como "Mi PC" en Windows): la raíz es la lista de volúmenes, no "/".
+    // En AmigaDOS "/" es el directorio padre. Ruta vacía: base::get_file_path()
+    // devuelve "" como padre de "Work:", así que esta raíz es el padre de los volúmenes.
+    fileitem->m_filename = "";
+    fileitem->m_displayname = "Volumes";
+    fileitem->m_is_folder = true;
   }
 #else
   {
@@ -444,6 +458,23 @@ const FileItemList& FileItem::children()
       }
     }
 #else
+#ifdef __MORPHOS__
+    // Raíz: un hijo por volumen montado ("Work:", "RAM Disk:"...)
+    if (this == rootitem) {
+      for (const std::string& volume : base::morphos::list_volumes()) {
+        FileItem* child = get_fileitem_by_path(volume, false);
+        if (!child) {
+          child = new FileItem(this);
+          child->m_filename = volume;
+          child->m_displayname = volume;
+          child->m_is_folder = true;
+          put_fileitem(child);
+        }
+        insertChildSorted(child);
+      }
+    }
+    else
+#endif
     {
       DIR* dir = opendir(m_filename.c_str());
       if (dir) {
@@ -510,6 +541,12 @@ const FileItemList& FileItem::children()
 
 void FileItem::createDirectory(const std::string& dirname)
 {
+#ifdef __MORPHOS__
+  // En la lista de volúmenes no se pueden crear carpetas (join_path("", x) sería
+  // relativa al directorio actual del programa)
+  if (m_filename.empty())
+    throw base::Exception("Folders can't be created in the volume list. Enter a volume first.");
+#endif
   base::make_directory(base::join_path(m_filename, dirname));
 
   // Invalidate the children list.

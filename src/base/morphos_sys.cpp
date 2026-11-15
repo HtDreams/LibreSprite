@@ -11,6 +11,7 @@
 
 #include "base/morphos_sys.h"
 
+#include <algorithm>
 #include <cstring>
 
 #include <dos/dos.h>
@@ -88,6 +89,43 @@ bool open_workbench_object(const std::string& path)
   CloseLibrary(WorkbenchBase);
   WorkbenchBase = nullptr;
   return ok != FALSE;
+}
+
+} // namespace morphos
+} // namespace base
+
+namespace base {
+namespace morphos {
+
+std::vector<std::string> list_volumes()
+{
+  std::vector<std::string> volumes;
+
+  // Mientras la lista DOS está bloqueada no se puede llamar a otras funciones de
+  // dos.library: aquí solo se copian los nombres.
+  const ULONG flags = LDF_VOLUMES | LDF_READ;
+  struct DosList* dl = LockDosList(flags);
+  while ((dl = NextDosEntry(dl, LDF_VOLUMES)) != nullptr) {
+    // Sin dol_Task el volumen no está montado (disco extraído): acceder a él
+    // abriría el requester "Inserte el volumen...".
+    if (!dl->dol_Task)
+      continue;
+
+    // dol_Name es un BSTR: primer byte = longitud, sin terminador garantizado
+    const unsigned char* bstr = (const unsigned char*)BADDR(dl->dol_Name);
+    if (!bstr || bstr[0] == 0)
+      continue;
+    std::string name((const char*)bstr + 1, bstr[0]);
+    name += ':';
+
+    // Dos discos pueden tener el mismo nombre: se muestra uno
+    if (std::find(volumes.begin(), volumes.end(), name) == volumes.end())
+      volumes.push_back(name);
+  }
+  UnLockDosList(flags);
+
+  std::sort(volumes.begin(), volumes.end());
+  return volumes;
 }
 
 } // namespace morphos

@@ -103,8 +103,21 @@ void base::thread::launch_thread(func_wrapper* f)
 #else
 
   pthread_t thread;
+#ifdef __MORPHOS__
+  // MorphOS: the main task gets 4 MB (__stack in main.cpp), but the stack of a
+  // pthread depends on the default of the pthread library. File loaders (Job),
+  // thumbnails, filters and the session backup run here: give them an explicit
+  // 1 MB, as on Linux they get several MB by default.
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, 1024 * 1024);
+  if (::pthread_create(&thread, &attr, pthread_thread_proxy, f) == 0)
+    m_native_handle = (void*)thread;
+  pthread_attr_destroy(&attr);
+#else
   if (::pthread_create(&thread, NULL, pthread_thread_proxy, f) == 0)
     m_native_handle = (void*)thread;
+#endif
 
 #endif
 }

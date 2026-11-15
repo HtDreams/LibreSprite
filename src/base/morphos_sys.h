@@ -13,6 +13,7 @@
 #ifdef __MORPHOS__
 
 #include <string>
+#include <vector>
 
 namespace base {
 namespace morphos {
@@ -30,6 +31,10 @@ bool open_url(const std::string& url);
 // Abre un fichero con su herramienta por defecto o una carpeta en Ambient,
 // como un doble clic (workbench.library, OpenWorkbenchObject)
 bool open_workbench_object(const std::string& path);
+
+// Nombres de los volúmenes montados ("Work:", "RAM Disk:"...), como la lista de
+// volúmenes del Workbench. Sirve de raíz del diálogo de ficheros (en Unix es "/").
+std::vector<std::string> list_volumes();
 
 } // namespace morphos
 } // namespace base

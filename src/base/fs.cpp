@@ -34,6 +34,17 @@ bool has_path_traversal(const std::string& relativePath)
   if (relativePath.find('\0') != std::string::npos)
     return true;
 
+#ifdef __MORPHOS__
+  // AmigaDOS: ':' hace la ruta absoluta ("RAM:x", ":x" = raíz del volumen actual),
+  // un '/' inicial sube al directorio padre y "//" sube un nivel en mitad de la
+  // ruta ("a//b" = "b" en el padre). Cualquiera de ellos saldría del directorio
+  // base. ".." no es especial en AmigaDOS, pero se sigue rechazando abajo.
+  if (relativePath.find(':') != std::string::npos ||
+      relativePath[0] == '/' ||
+      relativePath.find("//") != std::string::npos)
+    return true;
+#endif
+
   namespace fs = std::filesystem;
 
   // Prefixing with "./" keeps a leading '/' (or a Windows drive letter)
@@ -54,6 +65,11 @@ bool is_safe_archive_entry_path(const std::string& fileName)
     return false;
   if (fileName.find(':') != std::string::npos)
     return false;
+#ifdef __MORPHOS__
+  // AmigaDOS: "//" en mitad de la ruta sube al directorio padre
+  if (fileName.find("//") != std::string::npos)
+    return false;
+#endif
 
   static const std::string kReservedNames[] = {
       "con",  "prn",  "aux",  "nul",  "com1", "com2", "com3", "com4",
