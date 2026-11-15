@@ -9,6 +9,7 @@
 #include "delta/JSON.hpp"
 #include "di.hpp"
 #include "app/script/api/script_api_common.h"
+#include "app/script/api/script_byte_order.h"
 
 #include "base/base64.h"
 #include "doc/image.h"
@@ -64,6 +65,8 @@ public:
         return {};
       }
       std::memcpy(img.getPixelAddress(0, 0), bytes.data(), bytes.size());
+      // Bytes R,G,B,A from the script -> packed pixels (no-op on little-endian)
+      script_api::swap_pixels_to_script_order(img.getPixelAddress(0, 0), bytes.size(), img.pixelFormat());
       if (auto* mgr = ui::Manager::getDefault())
         mgr->invalidate();
       return {};
@@ -73,6 +76,8 @@ public:
       auto* addr = img.getPixelAddress(0, 0);
       std::size_t size = std::size_t(img.getRowStrideSize()) * img.height();
       auto vec = std::make_shared<std::vector<uint8_t>>(addr, addr + size);
+      // Packed pixels -> bytes R,G,B,A for the script (no-op on little-endian)
+      script_api::swap_pixels_to_script_order(vec->data(), vec->size(), img.pixelFormat());
       return JSON::Value{vec};
     };
 

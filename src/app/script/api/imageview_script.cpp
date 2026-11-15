@@ -9,6 +9,7 @@
 #include "delta/JSON.hpp"
 #include "di.hpp"
 #include "app/script/api/widget_script.h"
+#include "app/script/api/script_byte_order.h"
 
 #include "she/system.h"
 #include "she/surface.h"
@@ -53,6 +54,9 @@ public:
       const std::ptrdiff_t rowBytes = static_cast<std::ptrdiff_t>(w) * 4;
       for (int y = 0; y < h; ++y) {
         std::copy(src, src + rowBytes, surface->getData(0, y));
+        // The RGBA surface uses the same packed layout as doc RGB images
+        // (masks 0xFF, 0xFF00...): bytes R,G,B,A -> packed (no-op on little-endian)
+        script_api::swap_pixels_to_script_order(surface->getData(0, y), rowBytes, doc::IMAGE_RGB);
         src += rowBytes;
       }
       surface->unlock();
