@@ -99,7 +99,8 @@ namespace ui {
 
     // Mark the given rectangle as a area to be flipped to the real
     // screen
-    void dirtyRect(const gfx::Rect& bounds);
+    // tag: only for the optional redraw profiling (LIBRESPRITE_PROFILE)
+    void dirtyRect(const gfx::Rect& bounds, const char* tag = "other");
 
     void _openWindow(Window* window);
     void _closeWindow(Window* window, bool redraw_background);

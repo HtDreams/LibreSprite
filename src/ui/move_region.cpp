@@ -38,7 +38,7 @@ void move_region(Manager* manager, const Region& region, int dx, int dy)
     surface->scrollTo(rc, dx, dy);
 
     rc.offset(dx, dy);
-    Manager::getDefault()->dirtyRect(rc);
+    Manager::getDefault()->dirtyRect(rc, "scroll");
   }
   // Blit saving areas and copy them.
   else if (nrects > 1) {
@@ -62,7 +62,7 @@ void move_region(Manager* manager, const Region& region, int dx, int dy)
       {
         she::SurfaceLock tmpSurLock(tmpSur);
         tmpSur->blitTo(surface, 0, 0, rc.x, rc.y, rc.w, rc.h);
-        manager->dirtyRect(rc);
+        manager->dirtyRect(rc, "scroll");
       }
       tmpSur->dispose();
     }

@@ -65,7 +65,7 @@ void Overlay::drawOverlay(she::Surface* screen)
   Manager::getDefault()->dirtyRect(
     gfx::Rect(m_pos.x, m_pos.y,
               m_surface->width(),
-              m_surface->height()));
+              m_surface->height()), "overlay-draw");
 }
 
 void Overlay::moveOverlay(const gfx::Point& newPos)
@@ -101,7 +101,7 @@ void Overlay::restoreOverlappedArea(she::Surface* screen)
   Manager::getDefault()->dirtyRect(
     gfx::Rect(m_pos.x, m_pos.y,
               m_overlap->width(),
-              m_overlap->height()));
+              m_overlap->height()), "overlay-restore");
 }
 
 }

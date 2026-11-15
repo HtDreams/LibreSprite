@@ -36,6 +36,9 @@
 #include <list>
 #include <vector>
 #include <unordered_map>
+#include <cstdlib>
+#include <cstdio>
+#include <map>
 #include <memory>
 #include <atomic>
 #include <chrono>
@@ -363,6 +366,25 @@ namespace she {
     void getEventInternal(Event& event, bool) {
       SDL_Event sdlEvent;
       while (SDL_PollEvent(&sdlEvent)) {
+        // LIBRESPRITE_PROFILE: every 2 seconds, how many SDL events of each type
+        // arrived (e.g. mouse motion events while the mouse is still)
+        {
+          static const bool profile = std::getenv("LIBRESPRITE_PROFILE") != nullptr;
+          if (profile) {
+            static std::map<Uint32, unsigned> counts;
+            static Uint32 start = SDL_GetTicks();
+            ++counts[sdlEvent.type];
+            if (SDL_GetTicks() - start >= 2000) {
+              std::printf("[events]");
+              for (auto& kv : counts)
+                std::printf("  0x%x x%u", (unsigned)kv.first, kv.second);
+              std::printf("   (0x400 motion, 0x401/0x402 button, 0x403 wheel, 0x300/0x301 key, 0x200 window)\n");
+              std::fflush(stdout);
+              counts.clear();
+              start = SDL_GetTicks();
+            }
+          }
+        }
         switch (sdlEvent.type) {
         case SDL_APP_DIDENTERFOREGROUND:
           SDL2Surface::textureGen++;

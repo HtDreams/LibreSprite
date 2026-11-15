@@ -30,6 +30,10 @@
 #include "app/ui/skin/skin_style_property.h"
 #include "app/ui/skin/skin_theme.h"
 #include "app/ui/status_bar.h"
+#include "base/time.h"
+#include <vector>
+#include <string>
+#include <cstdlib>
 #include "app/ui/timeline.h"
 #include "app/ui/toolbar.h"
 #include "app/ui/zoom_entry.h"
@@ -79,9 +83,10 @@ class StatusBar::Indicators : public HBox {
       updateIndicator(text);
     }
 
-    void updateIndicator(const char* text) {
+    // Returns true if the indicator changed (the status bar has to be relaid out)
+    bool updateIndicator(const char* text) {
       if (this->text() == text)
-        return;
+        return false;
 
       setText(text);
 
@@ -89,6 +94,7 @@ class StatusBar::Indicators : public HBox {
         setMinSize(textSize());
       else
         setMinSize(minSize().createUnion(textSize()));
+      return true;
     }
 
   private:
@@ -115,9 +121,9 @@ class StatusBar::Indicators : public HBox {
       updateIndicator(icon, colored);
     }
 
-    void updateIndicator(she::Surface* icon, bool colored) {
+    bool updateIndicator(she::Surface* icon, bool colored) {
       if (m_icon == icon && m_colored == colored)
-        return;
+        return false;
 
       ASSERT(icon);
 
@@ -125,6 +131,7 @@ class StatusBar::Indicators : public HBox {
       m_colored = colored;
       setMinSize(minSize().createUnion(Size(m_icon->width(),
                                             m_icon->height())));
+      return true;
     }
 
   private:
@@ -157,12 +164,13 @@ class StatusBar::Indicators : public HBox {
       updateIndicator(color, true);
     }
 
-    void updateIndicator(const app::Color& color, bool first = false) {
+    bool updateIndicator(const app::Color& color, bool first = false) {
       if (m_color == color && !first)
-        return;
+        return false;
 
       m_color = color;
       setMinSize(minSize().createUnion(Size(32*guiscale(), 1)));
+      return true;
     }
 
   private:
@@ -187,19 +195,53 @@ public:
 
   void startIndicators() {
     m_iterator = m_indicators.begin();
+    m_changed = false;
   }
 
   void endIndicators() {
     removeAllNextIndicators();
-    layout();
+    // layout() always invalidates the whole status bar. The status text is set
+    // again on every mouse move (and on every frame while idle), so only relayout
+    // when an indicator was added, removed or changed.
+    if (m_changed) {
+      if (std::getenv("LIBRESPRITE_PROFILE"))
+        profileChange();
+      layout();
+    }
+  }
+
+  // LIBRESPRITE_PROFILE: every 2 seconds, how many times the status bar changed and
+  // the last different contents ("T:text" / "I" icon / "C" color)
+  void profileChange() {
+    std::string desc;
+    for (auto* ind : m_indicators) {
+      if (ind->indicatorType() == Indicator::kText) desc += "T:" + ind->text() + " | ";
+      else if (ind->indicatorType() == Indicator::kIcon) desc += "I | ";
+      else desc += "C | ";
+    }
+    static unsigned count = 0;
+    static std::vector<std::string> samples;
+    static base::tick_t start = base::current_tick();
+    ++count;
+    if (samples.size() < 4 && std::find(samples.begin(), samples.end(), desc) == samples.end())
+      samples.push_back(desc);
+    if (base::current_tick() - start >= 2000) {
+      std::printf("[statusbar] %u changes:", count);
+      for (auto& s : samples) std::printf("  {%s}", s.c_str());
+      std::printf("\n");
+      std::fflush(stdout);
+      count = 0;
+      samples.clear();
+      start = base::current_tick();
+    }
   }
 
   void addTextIndicator(const char* text) {
     // Re-use indicator
     if (m_iterator != m_indicators.end()) {
       if ((*m_iterator)->indicatorType() == Indicator::kText) {
-        static_cast<TextIndicator*>(*m_iterator)
-          ->updateIndicator(text);
+        if (static_cast<TextIndicator*>(*m_iterator)->updateIndicator(text))
+          m_changed = true;
         ++m_iterator;
         return;
       }
@@ -211,13 +253,14 @@ public:
     m_indicators.push_back(indicator);
     m_iterator = m_indicators.end();
     addChild(indicator);
+    m_changed = true;
   }
 
   void addIconIndicator(she::Surface* icon, bool colored) {
     if (m_iterator != m_indicators.end()) {
       if ((*m_iterator)->indicatorType() == Indicator::kIcon) {
-        static_cast<IconIndicator*>(*m_iterator)
-          ->updateIndicator(icon, colored);
+        if (static_cast<IconIndicator*>(*m_iterator)->updateIndicator(icon, colored))
+          m_changed = true;
         ++m_iterator;
         return;
       }
@@ -229,13 +272,14 @@ public:
     m_indicators.push_back(indicator);
     m_iterator = m_indicators.end();
     addChild(indicator);
+    m_changed = true;
   }
 
   void addColorIndicator(const app::Color& color) {
     if (m_iterator != m_indicators.end()) {
       if ((*m_iterator)->indicatorType() == Indicator::kColor) {
-        static_cast<ColorIndicator*>(*m_iterator)
-          ->updateIndicator(color);
+        if (static_cast<ColorIndicator*>(*m_iterator)->updateIndicator(color))
+          m_changed = true;
         ++m_iterator;
         return;
       }
@@ -247,6 +291,7 @@ public:
     m_indicators.push_back(indicator);
     m_iterator = m_indicators.end();
     addChild(indicator);
+    m_changed = true;
   }
 
 private:
@@ -257,12 +302,14 @@ private:
       auto indicator = *it;
       removeChild(indicator);
       delete indicator;
+      m_changed = true;
     }
     m_indicators.erase(m_iterator, end);
   }
 
   std::vector<Indicator*> m_indicators;
   std::vector<Indicator*>::iterator m_iterator;
+  bool m_changed = false;
 };
 
 class StatusBar::IndicatorsGeneration {

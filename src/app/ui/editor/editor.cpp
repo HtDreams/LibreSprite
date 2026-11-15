@@ -753,9 +753,30 @@ void Editor::drawSpriteClipped(const gfx::Region& updateRegion)
   ScreenGraphics screenGraphics;
   GraphicsPtr editorGraphics = getGraphics(clientBounds());
 
+  // Without tiled mode, only the screen area of updateRect can change. Clip to it:
+  // drawSpriteUnclippedRect() also fills the whole area around the sprite
+  // ("outside"), so with only the editor's drawable region as clip, every brush
+  // preview move repainted (and flipped) the entire editor (~1 Mpx at 1920x1080).
+  const bool tiled = (m_docPref.tiled.mode() != filters::TiledMode::NONE);
+
   for (const Rect& updateRect : updateRegion) {
+    gfx::Rect updateScreenRect;
+    if (!tiled) {
+      gfx::Rect rc = updateRect;
+      // Same margin as drawSpriteUnclippedRect() for zoom levels below 100%
+      if (m_zoom.scale() < 1.0)
+        rc.inflate(int(1./m_zoom.scale()), int(1./m_zoom.scale()));
+      // +1 px: rounding of non-integer zoom levels
+      updateScreenRect = editorToScreen(rc).enlarge(1);
+    }
+
     for (const Rect& screenRect : screenRegion) {
-      IntersectClip clip(&screenGraphics, screenRect);
+      gfx::Rect clipRect = (tiled ? screenRect:
+                                    screenRect.createIntersection(updateScreenRect));
+      if (clipRect.isEmpty())
+        continue;
+
+      IntersectClip clip(&screenGraphics, clipRect);
       if (clip)
         drawSpriteUnclippedRect(editorGraphics.get(), updateRect);
     }

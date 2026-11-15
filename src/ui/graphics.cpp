@@ -37,7 +37,19 @@ Graphics::~Graphics()
   // If we were drawing in the screen surface, we mark these regions
   // as dirty for the final flip.
   if (m_surface == she::instance()->defaultDisplay()->getSurface())
-    Manager::getDefault()->dirtyRect(m_dirtyBounds);
+    Manager::getDefault()->dirtyRect(m_dirtyBounds, m_profileTag);
+}
+
+void Graphics::dirty(const gfx::Rect& bounds)
+{
+  // Only what is inside the clip rectangle reaches the surface: mark just that
+  // part as dirty. Without the intersection, a widget repainting a small area
+  // with a large primitive (e.g. a background filling its whole bounds while
+  // clipped to one status bar indicator) marked the whole window for the final
+  // flip, and every frame uploaded and presented the full display.
+  gfx::Rect rc = m_surface->getClipBounds().createIntersection(bounds);
+  if (!rc.isEmpty())
+    m_dirtyBounds |= rc;
 }
 
 int Graphics::width() const
@@ -397,6 +409,7 @@ gfx::Size Graphics::doUIStringAlgorithm(const std::string& str, gfx::Color fg, g
 ScreenGraphics::ScreenGraphics()
   : Graphics(she::instance()->defaultDisplay()->getSurface(), 0, 0)
 {
+  m_profileTag = "screen-graphics";
   setFont(CurrentTheme::get()->getDefaultFont());
 }
 

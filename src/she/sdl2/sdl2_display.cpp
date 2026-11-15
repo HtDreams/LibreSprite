@@ -36,6 +36,37 @@
 #include <unordered_map>
 #include <memory>
 #include <vector>
+#include <cstdio>
+#include <cstdlib>
+
+// Optional redraw profiling (phase 4.2): set the environment variable
+// LIBRESPRITE_PROFILE (MorphOS: "SetEnv LIBRESPRITE_PROFILE 1") and every 2 seconds
+// the console shows how many frames were presented and where the time went.
+namespace {
+  struct RedrawProfile {
+    bool enabled = std::getenv("LIBRESPRITE_PROFILE") != nullptr;
+    Uint64 start = 0, flipTicks = 0, presentTicks = 0;
+    unsigned frames = 0, flips = 0;
+    unsigned long long flipPixels = 0;
+
+    void report(int w, int h) {
+      Uint64 now = SDL_GetPerformanceCounter();
+      if (!start) { start = now; return; }
+      double freq = (double)SDL_GetPerformanceFrequency();
+      double elapsed = (now - start) / freq;
+      if (elapsed < 2.0)
+        return;
+      std::printf("[profile] %dx%d  %.1f fps  flip: %u (%.0f kpx/frame, %.2f ms/frame)  present: %.2f ms/frame  busy: %.0f%%\n",
+                  w, h, frames / elapsed, flips,
+                  frames ? flipPixels / 1000.0 / frames : 0.0,
+                  frames ? flipTicks * 1000.0 / freq / frames : 0.0,
+                  frames ? presentTicks * 1000.0 / freq / frames : 0.0,
+                  100.0 * (flipTicks + presentTicks) / freq / elapsed);
+      std::fflush(stdout);
+      start = now; flipTicks = presentTicks = 0; frames = flips = 0; flipPixels = 0;
+    }
+  } g_profile;
+}
 
 #if __APPLE__
 namespace osx_tablet {
@@ -242,6 +273,7 @@ namespace she {
     if (!m_dirty || !she::instance()->isGfxThread() || !m_surface)
       return;
     m_dirty = false;
+    Uint64 t0 = g_profile.enabled ? SDL_GetPerformanceCounter() : 0;
 
     if (m_renderer) {
       #ifdef EMSCRIPTEN
@@ -254,6 +286,12 @@ namespace she {
       SDL_RenderPresent(m_renderer);
     } else
       SDL_UpdateWindowSurface(m_window);
+
+    if (g_profile.enabled) {
+      g_profile.presentTicks += SDL_GetPerformanceCounter() - t0;
+      ++g_profile.frames;
+      g_profile.report(m_width, m_height);
+    }
   }
 
   void SDL2Display::flip(const gfx::Rect& bounds)
@@ -268,8 +306,16 @@ namespace she {
     }
 
     SDL_Rect rect {bounds.x, bounds.y, bounds.w, bounds.h};
+    Uint64 t0 = 0;
+    if (g_profile.enabled) {
+      t0 = SDL_GetPerformanceCounter();
+      ++g_profile.flips;
+      g_profile.flipPixels += (unsigned long long)bounds.w * bounds.h;
+    }
     if (m_renderer) {
       static_cast<SDL2Surface*>(m_surface)->getTexture(&rect);
+      if (g_profile.enabled)
+        g_profile.flipTicks += SDL_GetPerformanceCounter() - t0;
       return;
     }
 
@@ -279,6 +325,8 @@ namespace she {
       rect.w * m_scale, rect.h * m_scale
     };
     SDL_BlitScaled((SDL_Surface*)m_surface->nativeHandle(), &rect, nativeSurface, &dst);
+    if (g_profile.enabled)
+      g_profile.flipTicks += SDL_GetPerformanceCounter() - t0;
   }
 
   void SDL2Display::maximize()

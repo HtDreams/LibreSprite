@@ -35,7 +35,15 @@
 #include "ui/view.h"
 #include "ui/window.h"
 
+#include <algorithm>
 #include <cctype>
+#include <vector>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <map>
+#include <string>
+#include <typeinfo>
 #include <climits>
 #include <cstdarg>
 #include <cstdio>
@@ -923,6 +931,41 @@ void Widget::setMaxSize(const gfx::Size& sz)
   m_maxSize = sz;
 }
 
+// Optional repaint profiling (phase 4.2, LIBRESPRITE_PROFILE): every 2 seconds,
+// which widgets were repainted and how many pixels each one, the largest first.
+namespace {
+  struct RepaintProfile {
+    bool enabled = std::getenv("LIBRESPRITE_PROFILE") != nullptr;
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    std::map<std::string, std::pair<unsigned, unsigned long long>> byWidget; // count, pixels
+
+    void add(const Widget* w, const gfx::Region& rgn) {
+      unsigned long long px = 0;
+      for (const auto& rc : rgn)
+        px += (unsigned long long)rc.w * rc.h;
+      std::string key = std::string(typeid(*w).name()) + (w->id().empty() ? "" : " #" + w->id());
+      auto& e = byWidget[key];
+      ++e.first;
+      e.second += px;
+
+      auto now = std::chrono::steady_clock::now();
+      if (now - start < std::chrono::seconds(2))
+        return;
+      std::vector<std::pair<unsigned long long, std::string>> sorted;
+      for (auto& kv : byWidget)
+        sorted.push_back({kv.second.second, kv.first + " x" + std::to_string(kv.second.first)});
+      std::sort(sorted.rbegin(), sorted.rend());
+      std::printf("[repaint]");
+      for (size_t i = 0; i < sorted.size() && i < 6; ++i)
+        std::printf("  %s: %llu kpx", sorted[i].second.c_str(), sorted[i].first / 1000);
+      std::printf("\n");
+      std::fflush(stdout);
+      byWidget.clear();
+      start = now;
+    }
+  } g_repaintProfile;
+}
+
 void Widget::flushRedraw()
 {
   std::queue<Widget*> processing;
@@ -974,6 +1017,9 @@ void Widget::flushRedraw()
         // Enqueue the draw message
         manager->enqueueMessage(msg);
       }
+
+      if (g_repaintProfile.enabled)
+        g_repaintProfile.add(widget, widget->m_updateRegion);
 
       manager->addInvalidRegion(widget->m_updateRegion);
       widget->m_updateRegion.clear();

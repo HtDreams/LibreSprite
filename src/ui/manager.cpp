@@ -37,6 +37,46 @@
 #include <limits>
 #include <list>
 #include <vector>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <map>
+#include <string>
+
+// Optional redraw profiling (phase 4.2, LIBRESPRITE_PROFILE): every 2 seconds, how
+// many pixels each path marked as dirty for the final flip.
+namespace {
+  struct DirtyProfile {
+    bool enabled = std::getenv("LIBRESPRITE_PROFILE") != nullptr;
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    std::map<std::string, std::pair<unsigned, unsigned long long>> byTag;
+    unsigned long long flipped = 0;
+    unsigned frames = 0;
+
+    void add(const char* tag, const gfx::Rect& rc) {
+      auto& e = byTag[tag];
+      ++e.first;
+      e.second += (unsigned long long)rc.w * rc.h;
+    }
+    void frame(const gfx::Region& rgn) {
+      for (const auto& rc : rgn)
+        flipped += (unsigned long long)rc.w * rc.h;
+      ++frames;
+      auto now = std::chrono::steady_clock::now();
+      if (now - start < std::chrono::seconds(2))
+        return;
+      std::printf("[dirty] frames %u, flipped %llu kpx/frame:", frames, frames ? flipped / 1000 / frames : 0);
+      for (auto& kv : byTag)
+        std::printf("  %s x%u %llu kpx", kv.first.c_str(), kv.second.first, kv.second.second / 1000);
+      std::printf("\n");
+      std::fflush(stdout);
+      byTag.clear();
+      flipped = 0;
+      frames = 0;
+      start = now;
+    }
+  } g_dirtyProfile;
+}
 
 namespace ui {
 
@@ -190,6 +230,9 @@ void Manager::flipDisplay()
     m_dirtyRegion.createIntersection(
       m_dirtyRegion,
       gfx::Region(gfx::Rect(0, 0, ui::display_w(), ui::display_h())));
+
+    if (g_dirtyProfile.enabled)
+      g_dirtyProfile.frame(m_dirtyRegion);
 
     for (auto& rc : m_dirtyRegion)
       m_display->flip(rc);
@@ -1008,8 +1051,10 @@ bool Manager::isFocusMovementKey(Message* msg)
   return false;
 }
 
-void Manager::dirtyRect(const gfx::Rect& bounds)
+void Manager::dirtyRect(const gfx::Rect& bounds, const char* tag)
 {
+  if (g_dirtyProfile.enabled)
+    g_dirtyProfile.add(tag, bounds);
   m_dirtyRegion.createUnion(m_dirtyRegion, gfx::Region(bounds));
 }
 
